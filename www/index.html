@@ -1,0 +1,1290 @@
+<!doctype html>
+<html lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><style>:root{color-scheme:light}</style>
+<title>Arrow Out</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Cairo:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: one-screen transit signboard. Header (level + hearts), square board of arrows, two actions, ad banner slot at the bottom. */
+:root {
+  --bg: #e7edf0;
+  --fg: #10202a;
+  --muted: #55656f;
+  --line: #c9d4da;
+  --surface: #f8fafb;
+  --board: #17303b;
+  --tile: #38596a;
+  --arrow: #f2f6f8;
+  --accent: #ffb300;
+  --accent-ink: #1a1300;
+  --alert: #ff6b6b;
+  --heart: #e5484d;
+  --c-up: #f2f6f8;
+  --c-right: #8fd8ff;
+  --c-down: #ffd166;
+  --c-left: #a8e6b8;
+  --font-body: "Cairo", system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Cairo", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1217; --fg: #e4ecf0; --muted: #8ea0ab; --line: #25343d; --surface: #152229;
+    --board: #17303b; --tile: #2c4856; --arrow: #f2f6f8; --accent: #ffb300; --accent-ink: #1a1300;
+    --alert: #ff6b6b; --heart: #e5484d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1217; --fg: #e4ecf0; --muted: #8ea0ab; --line: #25343d; --surface: #152229;
+  --board: #17303b; --tile: #2c4856; --arrow: #f2f6f8; --accent: #ffb300; --accent-ink: #1a1300;
+  --alert: #ff6b6b; --heart: #e5484d;
+  color-scheme: dark;
+}
+
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; overflow-x: hidden; }
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px;
+  -webkit-tap-highlight-color: transparent;
+}
+.app {
+  height: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-x: hidden;
+}
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand { font-family: var(--font-display); font-weight: 700; font-size: 26px; letter-spacing: .04em; text-transform: uppercase; line-height: 1; direction: ltr; }
+.hearts { display: flex; gap: 4px; direction: ltr; }
+.hearts svg { width: 24px; height: 24px; fill: var(--heart); transition: opacity .2s, transform .2s; }
+.hearts svg.lost { opacity: .22; transform: scale(.82); }
+
+.meta { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.level { font-weight: 700; font-size: 20px; }
+.level b { font-family: var(--font-display); font-size: 28px; font-variant-numeric: tabular-nums; margin-inline-start: 4px; }
+.count { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+
+.stage { flex: 1; min-height: 0; display: grid; place-items: center; container-type: size; }
+.home-stage { container-type: size; }
+.board {
+  --cols: 5;
+  --rows: 7;
+  position: relative;
+  width: min(100cqw, 560px, calc(100cqh * var(--cols) / var(--rows)));
+  aspect-ratio: var(--cols) / var(--rows);
+  direction: ltr;
+  background-color: var(--board);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--arrow) 14%, transparent);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.bsvg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.dot { fill: var(--tile); }
+.arr { color: var(--c-up); cursor: pointer; animation: appear .32s ease backwards; }
+.arr[data-dir="up"] { color: var(--c-up); }
+.arr[data-dir="right"] { color: var(--c-right); }
+.arr[data-dir="down"] { color: var(--c-down); }
+.arr[data-dir="left"] { color: var(--c-left); }
+.arr .bd { fill: none; stroke: currentColor; stroke-width: var(--lw, .13); stroke-linecap: round; stroke-linejoin: round; }
+.arr .hd { fill: currentColor; stroke: currentColor; stroke-width: .04; stroke-linejoin: round; }
+.arr .hit { fill: none; stroke: transparent; stroke-width: .8; stroke-linecap: round; stroke-linejoin: round; pointer-events: stroke; }
+.arr:focus { outline: none; }
+.arr:focus-visible .bd { stroke-width: calc(var(--lw, .13) * 1.5); }
+.arr.out { pointer-events: none; filter: drop-shadow(0 0 4px currentColor); transition: opacity 0.15s ease; }
+.arr.out .hit { display: none; }
+.arr.shake { animation: shake .42s cubic-bezier(.3, 1.4, .5, 1); }
+.arr.blocked { color: var(--alert); filter: drop-shadow(0 0 6px var(--alert)); z-index: 10; transition: color .2s, filter .2s; }
+.arr.hint { animation: hintp .7s ease-in-out infinite alternate; }
+.arr.hint .bd { opacity: 0; }
+.arr .hg path { fill: none; stroke-width: calc(var(--lw, .13) * 1.7); stroke-linecap: round; stroke-linejoin: round; }
+.arr .tr { fill: none; stroke: currentColor; stroke-width: calc(var(--lw, .13) * 3.5); stroke-opacity: .5; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; filter: blur(0.6px); }
+@keyframes appear { from { opacity: 0; } }
+@keyframes shake { 0% { transform: translate(0, 0); } 20% { transform: translate(calc(var(--bx, 0) * 3px), calc(var(--by, 0) * 3px)); } 40% { transform: translate(calc(var(--bx, 0) * -3px), calc(var(--by, 0) * -3px)); } 60% { transform: translate(calc(var(--bx, 0) * 2px), calc(var(--by, 0) * 2px)); } 80% { transform: translate(calc(var(--bx, 0) * -1px), calc(var(--by, 0) * -1px)); } 100% { transform: translate(0, 0); } }
+@keyframes hintp { from { opacity: 1; } to { opacity: .4; } }
+
+.tip { margin: 0; text-align: center; color: var(--muted); font-size: 13px; }
+.actions { display: flex; gap: 10px; }
+.btn {
+  flex: 1;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 48px;
+  padding: 8px 16px;
+  font: 700 16px/1.2 var(--font-body);
+  color: var(--fg);
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.btn:hover { border-color: var(--muted); }
+.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.btn:disabled { opacity: .55; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.chip { font-family: var(--font-display); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 1px 6px; border-radius: 5px; border: 1.5px solid currentColor; opacity: .75; }
+
+.banner {
+  min-height: 50px;
+  display: grid; place-items: center;
+  border: 1.5px dashed var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.modal {
+  position: fixed; inset: 0; z-index: 20;
+  display: grid; place-items: center;
+  background: rgba(5, 10, 14, .6);
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+}
+.sheet {
+  width: min(100%, 340px);
+  background: var(--surface);
+  color: var(--fg);
+  border: 1.5px solid var(--line);
+  border-radius: 18px;
+  padding: 22px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.sheet h2 { margin: 0; font-size: 22px; line-height: 1.3; text-wrap: balance; }
+.sheet .body { color: var(--muted); }
+.sheet .acts { display: flex; flex-direction: column; gap: 10px; }
+.adbox { display: grid; place-items: center; text-align: center; gap: 4px; min-height: 120px; padding: 14px; border: 1.5px dashed var(--line); border-radius: 12px; color: var(--fg); }
+.adbox small { color: var(--muted); font-size: 12px; }
+
+.brandrow { display: flex; align-items: center; gap: 10px; }
+.iconbtn { width: 40px; height: 40px; display: grid; place-items: center; padding: 0; color: var(--fg); background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px; cursor: pointer; }
+.iconbtn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.iconbtn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.home { height: 100%; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; overflow: hidden; }
+.home { position: relative; isolation: isolate; }
+.home::before { content: ""; position: absolute; z-index: -1; left: -30%; right: -30%; top: 4%; height: 56%; background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 24%, transparent), transparent); pointer-events: none; }
+.home-top { align-items: center; justify-content: space-between; }
+.home-stage { flex: 1; min-height: 0; display: grid; place-items: center; }
+.home-stage .board { box-shadow: 0 18px 50px color-mix(in srgb, var(--accent) 22%, transparent), inset 0 0 0 3px color-mix(in srgb, var(--arrow) 14%, transparent); }
+.stats { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.stat { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1.5px solid var(--line); border-radius: 99px; background: var(--surface); font-size: 14px; color: var(--muted); }
+.stat b { font: 700 20px/1 var(--font-display); color: var(--fg); font-variant-numeric: tabular-nums; }
+.stat svg { width: 18px; height: 18px; fill: var(--accent); stroke: none; }
+.home-copy { animation: rise .6s ease .1s backwards; }
+.home-actions { animation: rise .6s ease .25s backwards; }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+@media (prefers-reduced-motion: reduce) { .home-copy, .home-actions { animation: none; } }
+.board.pv { width: min(100cqw, 340px, calc(100cqh * var(--cols) / var(--rows))); }
+.pv .arr { cursor: default; pointer-events: none; }
+.home-copy { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.logo { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: clamp(54px, 17vw, 78px); line-height: .95; letter-spacing: .03em; text-transform: uppercase; direction: ltr; }
+.logo span { color: var(--accent); }
+.tagline { margin: 0; color: var(--muted); text-wrap: balance; }
+.home-actions { display: flex; flex-direction: column; gap: 10px; padding-bottom: 4px; }
+.home-actions .row { display: flex; gap: 8px; }
+.home-actions .row .btn { padding-inline: 8px; font-size: 15px; }
+.btn.big { min-height: 60px; font-size: 21px; border-radius: 14px; }
+.lvgrid { direction: ltr; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; max-height: 42dvh; overflow-y: auto; padding: 2px; }
+.lv { min-height: 48px; font: 700 22px/1 var(--font-display); font-variant-numeric: tabular-nums; color: var(--fg); background: var(--bg); border: 1.5px solid var(--line); border-radius: 10px; cursor: pointer; }
+.lv.cur { border-color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.lv:disabled { opacity: .4; cursor: default; }
+.lv:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.how { margin: 0; padding-inline-start: 22px; display: flex; flex-direction: column; gap: 8px; }
+
+/* Board themes unlocked by progress */
+/* Theme colors are applied from the THEMES list in the script. Glow is a CSS-only extra. */
+body[data-board="classic"] .board { background: transparent; box-shadow: none; border-radius: 0; }
+body[data-board="classic"] .dot { fill: transparent; }
+body[data-board="classic"] .board.pv { box-shadow: inset 0 0 0 2px var(--line); border-radius: 14px; }
+body[data-board="neon"] .arr,
+body[data-board="gold"] .arr,
+body[data-board="volcano"] .arr { filter: drop-shadow(0 0 .08px currentColor); }
+.sheet.wide { width: min(100%, 420px); }
+.tgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-height: 52dvh; overflow-y: auto; padding: 2px; text-align: start; }
+.tcard { display: flex; flex-direction: column; gap: 8px; padding: 8px; font: inherit; color: var(--fg); background: var(--bg); border: 1.5px solid var(--line); border-radius: 12px; cursor: pointer; }
+.tcard.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.tcard:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.tprev { display: flex; align-items: center; justify-content: center; gap: 4px; direction: ltr; aspect-ratio: 16 / 9; border-radius: 8px; background-color: var(--board); background-image: radial-gradient(circle, var(--tile) 1.4px, transparent 2px); background-size: 14px 14px; }
+.tprev svg { width: 24%; height: auto; max-height: 70%; fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.tprev.glow svg { filter: drop-shadow(0 0 3px currentColor); }
+.tname { font-weight: 700; font-size: 14px; line-height: 1.2; }
+.tstate { display: flex; align-items: center; gap: 6px; min-height: 22px; font-size: 13px; color: var(--muted); }
+.tstate .chip { color: var(--fg); }
+.tstate.own { color: var(--accent); font-weight: 700; }
+
+
+.hud { display: flex; align-items: center; gap: 10px; }
+.prog { height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.prog i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: inherit; transition: width .3s ease; }
+.particle { position: absolute; width: 7px; height: 7px; border-radius: 50%; pointer-events: none; z-index: 30; }
+.pop { position: absolute; z-index: 30; pointer-events: none; font: 700 34px/1 var(--font-display); color: var(--accent); text-shadow: 0 2px 0 rgba(0, 0, 0, .35); }
+.stars { display: flex; justify-content: center; gap: 8px; margin-bottom: 10px; direction: ltr; }
+.stars svg { width: 42px; height: 42px; fill: none; stroke: var(--line); stroke-width: 1.6; stroke-linejoin: round; }
+.stars svg.on { fill: var(--accent); stroke: var(--accent); animation: starpop .5s cubic-bezier(.3, 1.6, .5, 1) both; animation-delay: var(--dl, 0s); }
+@keyframes starpop { from { transform: scale(0) rotate(-40deg); } to { transform: scale(1) rotate(0); } }
+.unlock { margin-top: 8px; color: var(--accent); font-weight: 700; }
+
+.coins { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px 0 10px; border-radius: 99px; border: 1.5px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; font: 700 20px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.coins svg { width: 22px; height: 22px; flex: none; }
+.coins.bump { animation: bump .45s ease; }
+@keyframes bump { 40% { transform: scale(1.2); } }
+.coins:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.home-top { display: flex; align-items: center; justify-content: space-between; }
+.reward { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px; color: var(--fg); }
+.reward svg { width: 22px; height: 22px; flex: none; }
+.reward b { font: 700 24px/1 var(--font-display); color: var(--accent); font-variant-numeric: tabular-nums; }
+.reward span { font-size: 14px; color: var(--muted); }
+.chip.cost { display: inline-flex; align-items: center; gap: 4px; }
+.chip.cost svg { width: 14px; height: 14px; }
+.how { text-align: start; }
+.sheet .body .how { margin-top: 12px; }
+@media (max-width: 440px) { .top .brand { display: none; } }
+#atmo { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  background: radial-gradient(70% 45% at 15% 8%, hsl(var(--h1, 30) 75% 58% / .20), transparent 70%), radial-gradient(60% 45% at 92% 92%, hsl(var(--h2, 200) 70% 55% / .16), transparent 70%); }
+#atmo i { position: absolute; bottom: -60px; opacity: .045; color: var(--fg); animation: drift linear infinite; }
+#atmo svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+@keyframes drift { to { transform: translateY(-115dvh) rotate(var(--rot, 0deg)); } }
+.home, .app { position: relative; z-index: 1; }
+.world { font-size: 13px; font-weight: 600; color: var(--muted); margin-inline-start: 6px; }
+.chipbtn { font: 700 13px/1 var(--font-display); padding: 6px 10px; border: 1.5px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 99px; cursor: pointer; }
+.zoomreset { position: absolute; z-index: 5; top: 4px; inset-inline-start: 4px; }
+.stage { position: relative; }
+.level, .count { white-space: nowrap; }
+.meta { gap: 8px; }
+.chipbtn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.toast { position: fixed; z-index: 30; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 64px); padding: 10px 18px; border-radius: 99px; background: var(--fg); color: var(--bg); font-weight: 700; white-space: nowrap; pointer-events: none; animation: toast 2.5s ease forwards; }
+@keyframes toast { 0% { opacity: 0; transform: translate(-50%, -10px); } 12%, 80% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -6px); } }
+.ring { position: absolute; width: 34px; height: 34px; border: 2px solid; border-radius: 50%; pointer-events: none; z-index: 29; }
+@media (prefers-reduced-motion: reduce) { #atmo i { animation: none; bottom: 20%; } .toast { animation-duration: 3s; } }
+@media (max-height: 720px) { .tip, .banner { display: none; } .app { gap: 10px; } }
+@media (prefers-reduced-motion: reduce) { .coins.bump { animation: none; } }
+.sheet .body { text-align: center; }
+.themes-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.themes { display: flex; gap: 10px; }
+.swatch { width: 40px; height: 40px; padding: 0; border-radius: 50%; border: 2px solid var(--line); cursor: pointer; color: #fff; font: 700 15px/1 var(--font-display); text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
+.swatch.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
+.swatch.locked { opacity: .5; cursor: default; }
+.swatch:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.lv { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+.lv small { font: 12px/1 var(--font-body); color: var(--accent); letter-spacing: 1px; min-height: 12px; }
+@media (prefers-reduced-motion: reduce) {
+  .arr { animation: none; }
+  .stars svg.on { animation: none; }
+  .prog i { transition: none; }
+}
+
+</style>
+
+<div id="atmo" aria-hidden="true"></div>
+<div class="toast" id="toast" hidden></div>
+
+<section class="home" id="home" dir="rtl">
+  <div class="home-top">
+    <button class="coins" id="coinsHome" type="button" aria-label="العملات"></button>
+    <button class="iconbtn" id="muteBtn" type="button"></button>
+  </div>
+  <div class="home-stage">
+    <div class="board pv" id="pvBoard" aria-hidden="true"></div>
+  </div>
+  <div class="home-copy">
+    <h1 class="logo">Arrow <span>Out</span></h1>
+    <p class="tagline">أخرج كل الأسهم من اللوحة قبل أن تتعثر.</p>
+    <div class="stats" id="homeStats"></div>
+  </div>
+  <div class="home-actions">
+    <button class="btn primary big" id="playBtn" type="button">ابدأ اللعب</button>
+    <div class="row">
+      <button class="btn" id="levelsBtn" type="button">المراحل</button>
+      <button class="btn" id="themesBtn" type="button">الثيمات</button>
+      <button class="btn" id="shopHomeBtn" type="button">المتجر</button>
+      <button class="btn" id="howBtn" type="button">طريقة اللعب</button>
+    </div>
+  </div>
+</section>
+
+<div class="app" dir="rtl" id="game" hidden>
+  <header class="top">
+    <div class="brandrow">
+      <button class="iconbtn" id="homeBtn" type="button" aria-label="الرئيسية"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5M6.5 10v9h11v-9"/></svg></button>
+      <button class="iconbtn" id="shopBtn" type="button" aria-label="المتجر"><svg viewBox="0 0 24 24"><path d="M3 3h2l3 9h10l3-9h2M16 16a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM7 16a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/></svg></button>
+      <div class="brand">Arrow Out</div>
+    </div>
+    <div class="hud">
+      <button class="coins" id="coinsBtn" type="button" aria-label="العملات"></button>
+      <button class="iconbtn" id="fsBtn" type="button" aria-label="ملء الشاشة" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button class="iconbtn" id="muteBtn2" type="button"></button>
+      <div class="hearts" id="hearts" aria-label="المحاولات المتبقية"></div>
+    </div>
+  </header>
+
+  <div class="meta">
+    <div class="level">المرحلة <b id="lvl">1</b><span class="world" id="worldName"></span></div>
+    <div class="count" id="count"></div>
+  </div>
+  <div class="prog" aria-hidden="true"><i id="progFill"></i></div>
+
+  <main class="stage">
+    <button class="chipbtn zoomreset" id="zoomReset" type="button" hidden aria-label="إعادة حجم اللوحة">1×</button>
+    <div class="board" id="board" role="group" aria-label="لوحة الأسهم"></div>
+  </main>
+
+  <p class="tip">اضغط على سهم ليخرج. إذا اعترض سهمٌ طريق رأسه تخسر قلباً. كبّر اللوحة بإصبعين.</p>
+
+  <div class="actions">
+    <button class="btn" id="hintBtn" type="button">تلميح <span class="chip" id="hintChip">AD</span></button>
+    <button class="btn" id="restartBtn" type="button">إعادة</button>
+  </div>
+
+  <div class="banner">مساحة إعلان البانر 320×50 (تجريبية)</div>
+</div>
+
+<div class="modal" id="modal" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <h2 id="mTitle"></h2>
+    <div class="body" id="mBody"></div>
+    <div class="acts" id="mActions"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var DIRS = { up: [-1, 0], down: [1, 0], left: [0, -1], right: [0, 1] };
+  var ROT = { up: 0, right: 90, down: 180, left: 270 };
+  var NAME = { up: 'لأعلى', down: 'لأسفل', left: 'لليسار', right: 'لليمين' };
+  var HEART = 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z';
+  var $ = function (id) { return document.getElementById(id); };
+
+  function store(k, v) { try { if (v === undefined) { return localStorage.getItem(k); } localStorage.setItem(k, String(v)); } catch (e) { return null; } }
+
+  function mulberry(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function shuffle(arr, rnd) {
+    for (var i = arr.length - 1; i > 0; i--) { var j = Math.floor(rnd() * (i + 1)); var t = arr[i]; arr[i] = arr[j]; arr[j] = t; }
+    return arr;
+  }
+
+  var state = { level: 1, n: 4, occ: [], items: [], remaining: 0, lives: 3, busy: false, over: false, lifeBought: false };
+  var saved = parseInt(store('arrowout.level'), 10);
+  state.best = saved > 0 ? saved : 1;
+  state.level = state.best;
+  var savedCoins = store('arrowout.coins');
+  state.coins = savedCoins === null ? 20 : (parseInt(savedCoins, 10) || 0);
+
+  var COLS = [5, 6, 7, 9, 11, 13, 15, 17, 19, 20];
+  function dims(lv) {
+    var cols = COLS[Math.min(lv, COLS.length) - 1];
+    return { cols: cols, rows: Math.round(cols * 1.4) };
+  }
+  function inB(g, r, c) { return r >= 0 && r < g.rows && c >= 0 && c < g.cols; }
+  function firstBlocker(g, a) {
+    var d = DIRS[a.dir], h = a.cells[a.cells.length - 1], r = h[0] + d[0], c = h[1] + d[1];
+    while (inB(g, r, c)) { if (g.occ[r][c]) return g.occ[r][c]; r += d[0]; c += d[1]; }
+    return null;
+  }
+  var STEPS = [[-1, 0], [0, 1], [1, 0], [0, -1]];
+  function dirName(dr, dc) { return dr < 0 ? 'up' : dr > 0 ? 'down' : dc < 0 ? 'left' : 'right'; }
+  function freeDeg(g, own, r, c) {
+    var n = 0;
+    for (var k = 0; k < 4; k++) { var nr = r + STEPS[k][0], nc = c + STEPS[k][1]; if (inB(g, nr, nc) && own[nr][nc] === -1) n++; }
+    return n;
+  }
+  // Step 1: cut the whole board into winding paths. Turns tend to repeat, so spirals and hooks appear.
+  function tile(g, rnd, maxLen) {
+    var own = [], paths = [], r, c, k;
+    for (r = 0; r < g.rows; r++) { own.push([]); for (c = 0; c < g.cols; c++) own[r].push(-1); }
+    for (;;) {
+      var best = null, bd = 9, ties = 0;
+      for (r = 0; r < g.rows; r++) for (c = 0; c < g.cols; c++) if (own[r][c] === -1) {
+        var d = freeDeg(g, own, r, c);
+        if (d < bd) { bd = d; best = [r, c]; ties = 1; } else if (d === bd && rnd() < 1 / (++ties)) best = [r, c];
+      }
+      if (!best) break;
+      if (bd === 0) {
+        // isolated cell: glue it to the end of a neighbouring path when possible, otherwise leave a hole
+        var glued = false;
+        for (k = 0; k < 4 && !glued; k++) {
+          var ar = best[0] + STEPS[k][0], ac = best[1] + STEPS[k][1];
+          if (!inB(g, ar, ac) || own[ar][ac] < 0) continue;
+          var P = paths[own[ar][ac]], f = P[0], l = P[P.length - 1];
+          if (f[0] === ar && f[1] === ac) { P.unshift(best); own[best[0]][best[1]] = own[ar][ac]; glued = true; }
+          else if (l[0] === ar && l[1] === ac) { P.push(best); own[best[0]][best[1]] = own[ar][ac]; glued = true; }
+        }
+        if (!glued) own[best[0]][best[1]] = -2;
+        continue;
+      }
+      var want = 2 + Math.floor(Math.pow(rnd(), 1.4) * (maxLen - 1));
+      var path = [best], id = paths.length, lastK = -1, spin = rnd() < 0.5 ? 1 : 3;
+      own[best[0]][best[1]] = id;
+      while (path.length < want) {
+        var cur = path[path.length - 1], opts = [];
+        for (k = 0; k < 4; k++) { var nr = cur[0] + STEPS[k][0], nc = cur[1] + STEPS[k][1]; if (inB(g, nr, nc) && own[nr][nc] === -1) opts.push(k); }
+        if (!opts.length) break;
+        var pick = opts[Math.floor(rnd() * opts.length)];
+        if (lastK >= 0 && rnd() < 0.55) { var want2 = (lastK + spin) % 4; if (opts.indexOf(want2) >= 0) pick = want2; }
+        path.push([cur[0] + STEPS[pick][0], cur[1] + STEPS[pick][1]]);
+        own[path[path.length - 1][0]][path[path.length - 1][1]] = id;
+        lastK = pick;
+      }
+      if (path.length < 2) { own[best[0]][best[1]] = -2; continue; }
+      paths.push(path);
+    }
+    return { own: own, paths: paths };
+  }
+  // Step 2: choose which end of every path is the head, by removing arrows one at a time.
+  // An arrow can leave when the straight line in front of its head holds no other arrow that is still on the board.
+  // Heads are chosen at random among the options that work, with a preference for lines that cross many arrows
+  // removed earlier, which is what makes the finished board tangled.
+  function orient(g, tl, rnd, cw) {
+    var own = tl.own, paths = tl.paths, left = {}, n = paths.length, i, out = [], orig = own.map(function (row) { return row.slice(); });
+    for (i = 0; i < n; i++) left[i] = true;
+    var cur = own.map(function (row) { return row.slice(); }), count = n;
+    while (count > 0) {
+      var cands = [], total = 0;
+      for (i = 0; i < n; i++) if (left[i]) {
+        var P = paths[i];
+        for (var e = 0; e < 2; e++) {
+          var h = e ? P[P.length - 1] : P[0], p = e ? P[P.length - 2] : P[1];
+          var dr = h[0] - p[0], dc = h[1] - p[1], r = h[0] + dr, c = h[1] + dc, ok = true, cross = 0;
+          while (inB(g, r, c)) {
+            if (cur[r][c] >= 0) { ok = false; break; }
+            if (orig[r][c] >= 0) cross++;
+            r += dr; c += dc;
+          }
+          if (ok) { var w = 1 + cross * cw; cands.push({ i: i, e: e, w: w }); total += w; }
+        }
+      }
+      if (!cands.length) return null;
+      var x = rnd() * total, pick = cands[cands.length - 1];
+      for (var q = 0; q < cands.length; q++) { x -= cands[q].w; if (x <= 0) { pick = cands[q]; break; } }
+      var Pp = paths[pick.i].slice();
+      if (!pick.e) Pp.reverse();
+      out.push(Pp);
+      paths[pick.i].forEach(function (cell) { cur[cell[0]][cell[1]] = -1; });
+      left[pick.i] = false; count--;
+    }
+    return out;   // removal order, each path listed tail to head
+  }
+  function generate(lv) {
+    var dm = dims(lv), maxLen = lv <= 2 ? 4 + lv : Math.min(6 + Math.floor(lv * 0.8), 12);
+    var cw = lv <= 2 ? 0 : lv <= 4 ? 0.6 : 1.5;
+    for (var attempt = 0; attempt < 300; attempt++) {
+      var rnd = mulberry(lv * 7919 + 13 + attempt * 104729), g = { cols: dm.cols, rows: dm.rows, occ: [], items: [] }, i, j;
+      for (i = 0; i < g.rows; i++) { g.occ.push([]); for (j = 0; j < g.cols; j++) g.occ[i].push(null); }
+      var tl = tile(g, rnd, maxLen);
+      if (tl.paths.length < 4) continue;
+      var order = orient(g, tl, rnd, cw);
+      if (!order) continue;
+      if (lv >= 4) {
+        // keep the four directions evenly mixed: reject boards where one direction is rare
+        var cnt = { up: 0, down: 0, left: 0, right: 0 };
+        order.forEach(function (cells) { var l = cells[cells.length - 1], p = cells[cells.length - 2]; cnt[dirName(l[0] - p[0], l[1] - p[1])]++; });
+        if (Math.min(cnt.up, cnt.down, cnt.left, cnt.right) < order.length * 0.16) continue;
+      }
+      // draw order: the arrows removed last are drawn first, so the ones removed early sit on top
+      for (i = order.length - 1; i >= 0; i--) {
+        var cells = order[i], l = cells[cells.length - 1], p = cells[cells.length - 2];
+        var a = { cells: cells, dir: dirName(l[0] - p[0], l[1] - p[1]) };
+        cells.forEach(function (cell) { g.occ[cell[0]][cell[1]] = a; });
+        g.items.push(a);
+      }
+      g.attempts = attempt + 1;
+      return g;
+    }
+    // Safety net, practically never used: one two-cell arrow per row, all pointing right.
+    var f = { cols: dm.cols, rows: dm.rows, occ: [], items: [] }, y, x;
+    for (y = 0; y < f.rows; y++) { f.occ.push([]); for (x = 0; x < f.cols; x++) f.occ[y].push(null); }
+    for (y = 0; y < f.rows; y++) {
+      var fa = { cells: [[y, 0], [y, 1]], dir: 'right' };
+      f.occ[y][0] = fa; f.occ[y][1] = fa; f.items.push(fa);
+    }
+    return f;
+  }
+
+  // ---- Drawing and animation (SVG, 1 unit = 1 cell) ----
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function svgEl(name, attrs, parent) {
+    var e = document.createElementNS(SVGNS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function ptsD(pts) { return 'M' + pts.map(function (p) { return p[0].toFixed(3) + ' ' + p[1].toFixed(3); }).join('L'); }
+  function headD(dir, k) {
+    var d = DIRS[dir], dx = d[1], dy = d[0], px = -dy, py = dx;
+    function pt(f, w) { return (dx * f + px * w).toFixed(3) + ' ' + (dy * f + py * w).toFixed(3); }
+    return 'M' + pt(0.32 * k, 0) + 'L' + pt(-0.04, 0.21 * k) + 'L' + pt(-0.04, -0.21 * k) + 'Z';
+  }
+  function prepare(a) {
+    a.pts = a.cells.map(function (p) { return [p[1] + 0.5, p[0] + 0.5]; });
+    a.blen = a.pts.length - 1;
+  }
+  function buildBoard(host, g, interactive) {
+    host.innerHTML = '';
+    host.style.setProperty('--cols', g.cols);
+    host.style.setProperty('--rows', g.rows);
+    var lw = g.cols <= 7 ? 0.13 : g.cols <= 11 ? 0.16 : g.cols <= 15 ? 0.19 : 0.22;
+    var hk = g.cols <= 7 ? 1 : g.cols <= 11 ? 0.85 : 0.75;
+    host.style.setProperty('--lw', lw);
+    var svg = svgEl('svg', { viewBox: '0 0 ' + g.cols + ' ' + g.rows, 'class': 'bsvg' }, host);
+    var r, c;
+    for (r = 0; r < g.rows; r++) for (c = 0; c < g.cols; c++) if (!g.occ[r][c]) svgEl('circle', { cx: c + 0.5, cy: r + 0.5, r: 0.05, 'class': 'dot' }, svg);
+    g.items.forEach(function (a, idx) {
+      prepare(a);
+      a.gone = false;
+      var grp = svgEl('g', { 'class': 'arr', 'data-dir': a.dir }, svg);
+      grp.style.animationDelay = (idx * Math.min(40, 700 / g.items.length)) + 'ms';
+      svgEl('path', { 'class': 'hit', d: ptsD(a.pts) }, grp);
+      a.bd = svgEl('path', { 'class': 'bd', d: ptsD(a.pts) }, grp);
+      var h = a.pts[a.pts.length - 1];
+      a.hd = svgEl('path', { 'class': 'hd', d: headD(a.dir, hk), transform: 'translate(' + h[0] + ' ' + h[1] + ')' }, grp);
+      a.el = grp;
+      if (interactive) {
+        grp.setAttribute('tabindex', '0');
+        grp.setAttribute('role', 'button');
+        grp.setAttribute('aria-label', 'سهم ' + NAME[a.dir]);
+        grp.addEventListener('click', function () { tap(a); });
+        grp.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tap(a); } });
+      }
+    });
+  }
+  function pointAt(pts, cum, s) {
+    var i = 0;
+    while (i < cum.length - 2 && cum[i + 1] < s) i++;
+    var seg = cum[i + 1] - cum[i], t = seg > 0 ? Math.min(Math.max((s - cum[i]) / seg, 0), 1) : 0;
+    return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t];
+  }
+  function sliceD(pts, cum, from, to) {
+    var out = [pointAt(pts, cum, from)];
+    for (var i = 0; i < pts.length; i++) if (cum[i] > from && cum[i] < to) out.push(pts[i]);
+    out.push(pointAt(pts, cum, to));
+    return { d: ptsD(out), head: out[out.length - 1] };
+  }
+  function launchBlocked(a, g, blocker) {
+    clearHint(a);
+    var d = DIRS[a.dir], head = a.pts[a.pts.length - 1], hCell = a.cells[a.cells.length - 1];
+    var blockerHeadDist = 999;
+    blocker.cells.forEach(function(c) {
+      var dist = Math.abs(c[0] - hCell[0]) + Math.abs(c[1] - hCell[1]);
+      if (dist < blockerHeadDist) blockerHeadDist = dist;
+    });
+    var maxDist = Math.max(0.1, blockerHeadDist - 1) * 0.7;
+    var far = [head[0] + d[1] * maxDist, head[1] + d[0] * maxDist];
+    var pts = a.pts.concat([far]), cum = [0], i;
+    for (i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.abs(pts[i][0] - pts[i - 1][0]) + Math.abs(pts[i][1] - pts[i - 1][1]));
+    var dur = 320, t0 = performance.now();
+    function frame(now) {
+      var progress = Math.min((now - t0) / dur, 1);
+      var t = progress <= 0.5 ? progress * 2 : (1 - progress) * 2;
+      var p = 0.25; // Bouncy stretch factor
+      var easeT = progress <= 0.5 ? ((1 - Math.pow(1 - t, 3)) + Math.sin(t * Math.PI) * p * (1 - t)) : t;
+      var sd = maxDist * easeT;
+      var sl = sliceD(pts, cum, sd, sd + a.blen);
+      a.bd.setAttribute('d', sl.d);
+      a.hd.setAttribute('transform', 'translate(' + sl.head[0].toFixed(3) + ' ' + sl.head[1].toFixed(3) + ')');
+      if (progress < 1) requestAnimationFrame(frame);
+      else { a.bd.setAttribute('d', ptsD(a.pts)); a.hd.setAttribute('transform', 'translate(' + head[0].toFixed(3) + ' ' + head[1].toFixed(3) + ')'); }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // The head leads straight out of the board and the body follows the path it drew, like a snake.
+  function launch(a, g, done) {
+    clearHint(a);
+    a.el.classList.add('out');
+    var tr = svgEl('path', { 'class': 'tr' });
+    a.el.insertBefore(tr, a.bd);
+    var d = DIRS[a.dir], head = a.pts[a.pts.length - 1];
+    var edge = a.dir === 'up' ? head[1] : a.dir === 'down' ? g.rows - head[1] : a.dir === 'left' ? head[0] : g.cols - head[0];
+    var far = [head[0] + d[1] * (edge + a.blen + 1), head[1] + d[0] * (edge + a.blen + 1)];
+    var pts = a.pts.concat([far]), cum = [0], i;
+    for (i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.abs(pts[i][0] - pts[i - 1][0]) + Math.abs(pts[i][1] - pts[i - 1][1]));
+    var E = a.blen + edge + 0.5;
+    var dur = reduceMotion ? 120 : Math.min(950, 320 + E * 38), t0 = performance.now();
+    function frame(now) {
+      var t = Math.min((now - t0) / dur, 1);
+      // Bouncy Easing (BackOut)
+      var p = 0.2; // Strength of bounce
+      var easeT = (1 - Math.pow(1 - t, 3)) + Math.sin(t * Math.PI) * p * (1 - t);
+      var sd = E * easeT;
+      var sl = sliceD(pts, cum, sd, sd + a.blen);
+      a.bd.setAttribute('d', sl.d);
+      tr.setAttribute('d', sliceD(pts, cum, Math.max(0, sd - 2.6), sd + a.blen).d);
+      tr.style.opacity = Math.min(1, sd / 1.2);
+      a.hd.setAttribute('transform', 'translate(' + sl.head[0].toFixed(3) + ' ' + sl.head[1].toFixed(3) + ')');
+      if (t < 1) requestAnimationFrame(frame);
+      else { if (a.el.parentNode) a.el.parentNode.removeChild(a.el); if (done) done(); }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function renderHearts() {
+    var h = $('hearts'), html = '';
+    for (var i = 0; i < 3; i++) html += '<svg viewBox="0 0 24 24" class="' + (i < state.lives ? '' : 'lost') + '"><path d="' + HEART + '"/></svg>';
+    h.innerHTML = html;
+  }
+  function renderMeta() {
+    $('lvl').textContent = state.level;
+    $('count').textContent = state.g.cols + '×' + state.g.rows + ' · ' + state.remaining + ' سهم';
+    $('progFill').style.width = (state.total ? (1 - state.remaining / state.total) * 100 : 0) + '%';
+  }
+
+  function startLevel() {
+    var g = generate(state.level);
+    state.g = g; state.items = g.items;
+    state.remaining = g.items.length; state.lives = 3; state.busy = false; state.over = false; state.lifeBought = false;
+    state.total = g.items.length; state.combo = 0; state.maxCombo = 0; state.lastExit = 0;
+    buildBoard($('board'), g, true);
+    resetView();
+    var w = worldOf(state.level);
+    $('worldName').textContent = '· ' + w.n;
+    setAtmo(state.level);
+    if ((state.level - 1) % 10 === 0) toast((state.level === 1 ? 'عالمك الأول: ' : 'عالم جديد: ') + w.n);
+    renderHearts(); renderMeta();
+    $('hintBtn').disabled = false;
+  }
+
+  function tap(it) {
+    if (state.over || it.gone) return;
+    var g = state.g, blocker = firstBlocker(g, it);
+    if (blocker) {
+      state.lives--;
+      renderHearts();
+      sfx.err(); buzz(70); state.combo = 0;
+      launchBlocked(it, g, blocker);
+      blocker.el.classList.add('blocked');
+      setTimeout(function () { blocker.el.classList.remove('blocked'); }, 1000);
+      if (state.lives <= 0) { state.over = true; setTimeout(lose, 450); }
+      return;
+    }
+    it.gone = true;
+    it.cells.forEach(function (p) { g.occ[p[0]][p[1]] = null; });
+    state.remaining--;
+    launch(it, g);
+    exitFx(it);
+    renderMeta();
+    if (state.remaining === 0) { state.over = true; setTimeout(win, 700); }
+  }
+
+  function hint() {
+    if (state.over) return;
+    var g = state.g;
+    var free = state.items.filter(function (it) { return !it.gone && !firstBlocker(g, it); });
+    if (!free.length) return;
+    free.sort(function (x, y) { return y.cells.length - x.cells.length; });
+    showHint(free[0]);
+  }
+  // The hinted arrow is redrawn as a rainbow along its whole length.
+  function clearHint(a) {
+    clearTimeout(a.hintTimer);
+    a.el.classList.remove('hint');
+    var hg = a.el.querySelector('.hg');
+    if (hg && hg.parentNode) hg.parentNode.removeChild(hg);
+    a.hd.style.fill = ''; a.hd.style.stroke = '';
+  }
+  function showHint(a) {
+    clearHint(a);
+    var grp = svgEl('g', { 'class': 'hg' }, a.el), n = a.pts.length - 1, col = '';
+    for (var i = 0; i < n; i++) {
+      col = 'hsl(' + Math.round(30 + 300 * i / Math.max(n - 1, 1)) + ' 88% 55%)';
+      svgEl('path', { d: ptsD([a.pts[i], a.pts[i + 1]]), stroke: col }, grp);
+    }
+    a.hd.style.fill = col; a.hd.style.stroke = col;
+    a.el.classList.add('hint');
+    a.hintTimer = setTimeout(function () { clearHint(a); }, 2800);
+  }
+
+  function modal(title, body, actions) {
+    $('modal').querySelector('.sheet').classList.remove('wide');
+    $('mTitle').textContent = title;
+    var mb = $('mBody'); mb.innerHTML = '';
+    if (typeof body === 'string') mb.textContent = body; else mb.appendChild(body);
+    var box = $('mActions'); box.innerHTML = '';
+    actions.forEach(function (a) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn' + (a.primary ? ' primary' : '');
+      b.textContent = a.label;
+      if (a.chip) { var c = document.createElement('span'); c.className = 'chip'; c.textContent = 'AD'; b.appendChild(c); }
+      if (a.cost) { var k = document.createElement('span'); k.className = 'chip cost'; k.innerHTML = coinSvg() + a.cost; b.appendChild(k); }
+      b.addEventListener('click', a.onClick);
+      box.appendChild(b);
+    });
+    $('modal').hidden = false;
+    if (box.firstChild) box.firstChild.focus();
+  }
+  function closeModal() { $('modal').hidden = true; }
+
+  // Placeholder for a real ad SDK call (AdMob / AppLovin). Replace the body of this function when you publish the game.
+  function showAd(kind, done) {
+    var box = document.createElement('div');
+    box.className = 'adbox';
+    var t = document.createElement('div'); t.textContent = kind === 'reward' ? 'إعلان مكافأة (تجريبي)' : 'إعلان بيني (تجريبي)';
+    var s = document.createElement('small'); s.textContent = 'هنا سيظهر الإعلان الحقيقي بعد ربط حساب الإعلانات.';
+    box.appendChild(t); box.appendChild(s);
+    var left = 3, timer = null;
+    var finishLabel = kind === 'reward' ? 'استلام المكافأة' : 'متابعة';
+    modal(kind === 'reward' ? 'شاهد الإعلان للحصول على المكافأة' : 'إعلان', box, [
+      { label: 'متابعة بعد ' + left, primary: true, onClick: function () { clearInterval(timer); closeModal(); done(); } }
+    ]);
+    var btn = $('mActions').firstChild;
+    btn.disabled = true;
+    timer = setInterval(function () {
+      left--;
+      if (left <= 0) { clearInterval(timer); btn.disabled = false; btn.textContent = finishLabel; }
+      else btn.textContent = 'متابعة بعد ' + left;
+    }, 1000);
+  }
+
+  // Coins: a new level pays LEVEL_REWARD, a first 3-star clear pays STAR_BONUS, and a rewarded ad can double it.
+  // Replaying a cleared level pays nothing, so levels cannot be farmed.
+  function win() {
+    var stars = Math.max(1, state.lives);
+    var prevStars = loadStars()[state.level] || 0;
+    var firstClear = state.level === state.best;
+    var cleared = state.level;
+    saveStars(cleared, stars);
+    if (firstClear) { state.best = cleared + 1; store('arrowout.level', state.best); }
+    var base = 0;
+    var bonus = (stars === 3 && prevStars < 3) ? STAR_BONUS : 0;
+    var reward = bonus;
+    if (reward) addCoins(reward);
+    sfx.win(); buzz([40, 40, 90]);
+
+    function render(doubled) {
+      var body = document.createElement('div');
+      body.appendChild(starsEl(stars));
+      var msg = document.createElement('div');
+      msg.textContent = 'المرحلة ' + cleared + ' مكتملة' + (state.maxCombo >= 2 ? ' · أعلى كومبو ×' + state.maxCombo : '') + '.';
+      body.appendChild(msg);
+      if (base) body.appendChild(rewardRow(base, 'مكافأة المرحلة'));
+      if (bonus) body.appendChild(rewardRow(bonus, 'مكافأة 3 نجوم'));
+      else if (stars < 3) { var hintTxt = document.createElement('div'); hintTxt.className = 'count'; hintTxt.textContent = 'أنهِ المرحلة بدون أخطاء لتحصل على 3 نجوم وعملات.'; body.appendChild(hintTxt); }
+      if (doubled) body.appendChild(rewardRow(reward, 'مضاعفة بالإعلان'));
+      var actions = [
+        { label: 'المرحلة التالية', primary: true, onClick: function () {
+            closeModal();
+            var interstitial = cleared % 3 === 0;
+            state.level = cleared + 1;
+            if (interstitial) showAd('interstitial', startLevel); else startLevel();
+        } }
+      ];
+      if (reward && !doubled) {
+        actions.push({ label: 'ضاعف المكافأة ×2', chip: true, onClick: function () {
+          showAd('reward', function () { addCoins(reward); render(true); });
+        } });
+      }
+      modal('أحسنت!', body, actions);
+    }
+    setTimeout(confetti, 40);
+    render(false);
+  }
+
+  function lose() {
+    var actions = [];
+    function revive() { state.lifeBought = true; state.lives = 2; state.over = false; renderHearts(); }
+    function viaAd() { showAd('reward', revive); }
+    if (!state.lifeBought) {
+      if (state.coins >= LIFE_COST) {
+        actions.push({ label: 'محاولة إضافية', cost: LIFE_COST, primary: true, onClick: function () { addCoins(-LIFE_COST); closeModal(); revive(); } });
+        actions.push({ label: 'محاولة إضافية', chip: true, onClick: viaAd });
+      } else {
+        actions.push({ label: 'محاولة إضافية', chip: true, primary: true, onClick: viaAd });
+      }
+    }
+    actions.push({ label: 'إعادة المرحلة', onClick: function () { closeModal(); startLevel(); } });
+    modal('انتهت المحاولات', 'اعترضت الأسهم طريقك ثلاث مرات.', actions);
+  }
+
+  $('hintBtn').addEventListener('click', function () {
+    if (state.over) return;
+    if (state.coins >= HINT_COST) { addCoins(-HINT_COST); hint(); }
+    else showAd('reward', hint);
+  });
+  $('restartBtn').addEventListener('click', startLevel);
+
+  // ---- Sound, vibration and particles ----
+  var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  var audio = { ctx: null, mute: store('arrowout.mute') === '1' };
+  function ac() {
+    if (audio.mute) return null;
+    try {
+      if (!audio.ctx) { var C = window.AudioContext || window.webkitAudioContext; if (!C) return null; audio.ctx = new C(); }
+      if (audio.ctx.state === 'suspended') audio.ctx.resume();
+      return audio.ctx;
+    } catch (e) { return null; }
+  }
+  function tone(freq, dur, type, vol, slideTo, delay) {
+    var c = ac(); if (!c) return;
+    try {
+      var t = c.currentTime + (delay || 0), o = c.createOscillator(), g = c.createGain();
+      o.type = type || 'sine';
+      o.frequency.setValueAtTime(freq, t);
+      if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol || 0.15, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(c.destination);
+      o.start(t); o.stop(t + dur + 0.03);
+    } catch (e) {}
+  }
+  var SCALE = [523, 587, 659, 784, 880, 1047, 1175, 1319];
+  var sfx = {
+    click: function () { tone(660, 0.05, 'square', 0.035); },
+    out: function (combo) { var f = SCALE[Math.min(combo, SCALE.length) - 1]; tone(f * 0.5, 0.22, 'triangle', 0.16, f); tone(f, 0.14, 'sine', 0.08, f * 1.5, 0.04); },
+    err: function () { tone(220, 0.28, 'sawtooth', 0.1, 90); },
+    win: function () { [523, 659, 784, 1047].forEach(function (f, i) { tone(f, 0.3, 'triangle', 0.14, null, i * 0.1); }); }
+  };
+  function buzz(p) { try { if (!audio.mute && navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
+
+  function burst(host, x, y, colors, count, spread) {
+    if (reduceMotion) return;
+    function spawn(i) {
+      var p = document.createElement('i');
+      p.className = 'particle';
+      p.style.left = x + '%'; p.style.top = y + '%';
+      p.style.background = colors[i % colors.length];
+      host.appendChild(p);
+      var a = Math.random() * Math.PI * 2, d = (0.5 + Math.random()) * spread;
+      var anim = p.animate([
+        { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
+        { transform: 'translate(calc(-50% + ' + (Math.cos(a) * d) + 'px), calc(-50% + ' + (Math.sin(a) * d) + 'px)) scale(.2)', opacity: 0 }
+      ], { duration: 450 + Math.random() * 350, easing: 'cubic-bezier(.1,.7,.3,1)' });
+      anim.onfinish = function () { if (p.parentNode) p.parentNode.removeChild(p); };
+    }
+    for (var i = 0; i < count; i++) spawn(i);
+  }
+  function pop(host, x, y, text) {
+    if (reduceMotion) return;
+    var d = document.createElement('div');
+    d.className = 'pop'; d.textContent = text;
+    d.style.left = x + '%'; d.style.top = y + '%';
+    host.appendChild(d);
+    var a = d.animate([
+      { transform: 'translate(-50%, -50%) scale(.6)', opacity: 0 },
+      { transform: 'translate(-50%, -90%) scale(1.15)', opacity: 1, offset: 0.25 },
+      { transform: 'translate(-50%, -200%) scale(1)', opacity: 0 }
+    ], { duration: 800, easing: 'ease-out' });
+    a.onfinish = function () { if (d.parentNode) d.parentNode.removeChild(d); };
+  }
+  function exitFx(it) {
+    var now = Date.now();
+    state.combo = (now - state.lastExit < 1300) ? state.combo + 1 : 1;
+    state.lastExit = now;
+    if (state.combo > state.maxCombo) state.maxCombo = state.combo;
+    sfx.out(state.combo);
+    buzz(12);
+    var g = state.g, board = $('board'), h = it.cells[it.cells.length - 1];
+    var x = (h[1] + 0.5) * 100 / g.cols, y = (h[0] + 0.5) * 100 / g.rows;
+    if (it.dir === 'up') y = 0; else if (it.dir === 'down') y = 100; else if (it.dir === 'left') x = 0; else x = 100;
+    var mp = mapView(x, y);
+    x = Math.min(Math.max(mp[0], 2), 98); y = Math.min(Math.max(mp[1], 2), 98);
+    var col = window.getComputedStyle(it.el).color;
+    burst(board, x, y, [col, col, 'var(--accent)'], 8, 46);
+    ring(board, x, y, col);
+    if (state.combo >= 2) pop(board, Math.min(Math.max(x, 12), 88), Math.min(Math.max(y, 10), 90), '×' + state.combo);
+  }
+  function ring(host, x, y, col) {
+    if (reduceMotion) return;
+    var d = document.createElement('i');
+    d.className = 'ring'; d.style.left = x + '%'; d.style.top = y + '%'; d.style.borderColor = col;
+    host.appendChild(d);
+    var a = d.animate([
+      { transform: 'translate(-50%, -50%) scale(.2)', opacity: 0.9 },
+      { transform: 'translate(-50%, -50%) scale(2.6)', opacity: 0 }
+    ], { duration: 520, easing: 'ease-out' });
+    a.onfinish = function () { if (d.parentNode) d.parentNode.removeChild(d); };
+  }
+  function confetti() {
+    burst($('modal'), 50, 36, ['var(--c-up)', 'var(--c-right)', 'var(--c-down)', 'var(--c-left)', 'var(--accent)'], 40, 190);
+  }
+
+  // ---- Stars ----
+  var STAR = 'M12 3.2l2.6 5.5 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 9.5l6-.8L12 3.2z';
+  function loadStars() { try { return JSON.parse(store('arrowout.stars') || '{}') || {}; } catch (e) { return {}; } }
+  function saveStars(lv, n) { var s = loadStars(); if (!s[lv] || s[lv] < n) { s[lv] = n; store('arrowout.stars', JSON.stringify(s)); } }
+  function starText(lv) { var n = loadStars()[lv] || 0; return n ? '★★★'.slice(0, n) + '☆☆☆'.slice(0, 3 - n) : ''; }
+  function starsEl(n) {
+    var box = document.createElement('div');
+    box.className = 'stars';
+    var html = '';
+    for (var i = 0; i < 3; i++) html += '<svg viewBox="0 0 24 24" class="' + (i < n ? 'on' : '') + '" style="--dl:' + (0.15 + i * 0.18) + 's"><path d="' + STAR + '"/></svg>';
+    box.innerHTML = html;
+    return box;
+  }
+
+  // ---- Board themes, bought with coins ----
+  var THEME_PRICE = 350;
+  // v = [board, tile dots, up, right, down, left]
+  var THEMES = [
+    { id: 'classic', name: 'الورق', free: true, v: ['#f5ecdc', '#f5ecdc', '#6b4a2f', '#6b4a2f', '#6b4a2f', '#6b4a2f'],
+      page: { '--bg': '#f5ecdc', '--fg': '#4a3220', '--muted': '#8a6f55', '--line': '#e0d2ba', '--surface': '#fbf5e8', '--accent': '#c26a1b', '--accent-ink': '#fff8ee' } },
+    { id: 'signage', name: 'لوحة المرور', free: true },
+    { id: 'dusk', name: 'الغروب', v: ['#2a1b3d', '#4a3566', '#ffd7ba', '#ff9ecd', '#ffc857', '#b9a7ff'] },
+    { id: 'neon', name: 'نيون', v: ['#07070d', '#1d1d3a', '#00f0ff', '#ff2bd6', '#b6ff3b', '#ffe14d'], glow: true },
+    { id: 'forest', name: 'الغابة', v: ['#123524', '#2a5a42', '#f4f1de', '#e07a5f', '#f2cc8f', '#81b29a'] },
+    { id: 'ocean', name: 'المحيط', v: ['#06283d', '#0d4a6b', '#e0fbfc', '#5bc0eb', '#fde74c', '#9bf6c4'] },
+    { id: 'candy', name: 'الحلوى', v: ['#4a2147', '#6e3669', '#fff3b0', '#ff7eb6', '#7df9ff', '#b8f2a0'] },
+    { id: 'gold', name: 'الذهب', v: ['#1c1608', '#3a2e10', '#fff1c1', '#ffd166', '#ff9f1c', '#f4e285'], glow: true },
+    { id: 'volcano', name: 'البركان', v: ['#2b0d0d', '#5a1a14', '#ffe3d3', '#ff6b35', '#ffb703', '#ff9e9e'], glow: true }
+  ];
+  var VARS = ['--board', '--tile', '--c-up', '--c-right', '--c-down', '--c-left'];
+  var PAGE_VARS = ['--bg', '--fg', '--muted', '--line', '--surface', '--accent', '--accent-ink'];
+  function themeById(id) { return THEMES.filter(function (t) { return t.id === id; })[0]; }
+  function loadOwned() { try { var a = JSON.parse(store('arrowout.owned') || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+  function isOwned(t) { return !!t.free || loadOwned().indexOf(t.id) >= 0; }
+  function applyTheme(id) {
+    var t = themeById(id) || THEMES[0], st = document.body.style;
+    VARS.forEach(function (k, i) { if (t.v) st.setProperty(k, t.v[i]); else st.removeProperty(k); });
+    PAGE_VARS.forEach(function (k) { if (t.page) st.setProperty(k, t.page[k]); else st.removeProperty(k); });
+    document.body.dataset.board = t.id;
+    store('arrowout.theme', t.id);
+  }
+  function previewEl(t) {
+    var d = document.createElement('div');
+    d.className = 'tprev' + (t.glow ? ' glow' : '');
+    if (t.v) VARS.forEach(function (k, i) { d.style.setProperty(k, t.v[i]); });
+    else VARS.forEach(function (k, i) { d.style.setProperty(k, ['#17303b', '#38596a', '#f2f6f8', '#8fd8ff', '#ffd166', '#a8e6b8'][i]); });
+    ['up', 'right', 'down', 'left'].forEach(function (dir) {
+      d.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 24 24" style="stroke:var(--c-' + dir + ');transform:rotate(' + ROT[dir] + 'deg)" aria-hidden="true"><path d="M12 20V4M5.5 10.5 12 4l6.5 6.5"/></svg>');
+    });
+    return d;
+  }
+  function themeShop() {
+    var cur = document.body.dataset.board || 'classic';
+    var grid = document.createElement('div');
+    grid.className = 'tgrid';
+    THEMES.forEach(function (t) {
+      var owned = isOwned(t), b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tcard' + (cur === t.id ? ' sel' : '');
+      b.appendChild(previewEl(t));
+      var nm = document.createElement('div'); nm.className = 'tname'; nm.textContent = t.name; b.appendChild(nm);
+      var stt = document.createElement('div');
+      if (cur === t.id) { stt.className = 'tstate own'; stt.textContent = 'مستخدم'; }
+      else if (owned) { stt.className = 'tstate'; stt.textContent = 'استخدم'; }
+      else { stt.className = 'tstate'; stt.innerHTML = '<span class="chip cost">' + coinSvg() + THEME_PRICE + '</span>'; }
+      b.appendChild(stt);
+      b.addEventListener('click', function () {
+        if (owned) { applyTheme(t.id); themeShop(); return; }
+        if (state.coins >= THEME_PRICE) {
+          addCoins(-THEME_PRICE);
+          store('arrowout.owned', JSON.stringify(loadOwned().concat(t.id)));
+          applyTheme(t.id);
+          sfx.win(); buzz([30, 30, 60]);
+          themeShop();
+        } else {
+          modal('لا تكفي عملاتك', 'ثيم "' + t.name + '" بـ ' + THEME_PRICE + ' عملة، ولديك ' + state.coins + '. اجمع العملات بإنهاء المراحل بـ3 نجوم أو بمشاهدة إعلان.', [
+            { label: 'احصل على ' + AD_COINS + ' عملة', chip: true, primary: true, onClick: function () { showAd('reward', function () { addCoins(AD_COINS); themeShop(); }); } },
+            { label: 'رجوع', onClick: themeShop }
+          ]);
+        }
+      });
+      grid.appendChild(b);
+    });
+    modal('الثيمات', grid, [{ label: 'إغلاق', onClick: closeModal }]);
+    $('modal').querySelector('.sheet').classList.add('wide');
+  }
+
+  // ---- Coins ----
+  var HINT_COST = 10, LIFE_COST = 30, LEVEL_REWARD = 10, STAR_BONUS = 10, AD_COINS = 25;
+  sfx.coin = function () { tone(988, 0.08, 'square', 0.05); tone(1319, 0.2, 'square', 0.05, null, 0.07); };
+  function coinSvg() {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="var(--accent)"/><circle cx="12" cy="12" r="6.3" fill="none" stroke="var(--accent-ink)" stroke-width="1.6" opacity=".5"/></svg>';
+  }
+  function rewardRow(n, label) {
+    var d = document.createElement('div');
+    d.className = 'reward';
+    d.innerHTML = coinSvg() + '<b>+' + n + '</b><span>' + label + '</span>';
+    return d;
+  }
+  function renderHint() {
+    var chip = $('hintChip');
+    if (state.coins >= HINT_COST) { chip.className = 'chip cost'; chip.innerHTML = coinSvg() + HINT_COST; }
+    else { chip.className = 'chip'; chip.textContent = 'AD'; }
+  }
+  function renderCoins() {
+    Array.prototype.forEach.call(document.querySelectorAll('.coins'), function (el) {
+      el.innerHTML = coinSvg() + '<span class="coinval">' + state.coins + '</span>';
+    });
+    renderHint();
+  }
+  function addCoins(n) {
+    state.coins = Math.max(0, state.coins + n);
+    store('arrowout.coins', state.coins);
+    renderCoins();
+    if (n > 0) {
+      sfx.coin();
+      Array.prototype.forEach.call(document.querySelectorAll('.coins'), function (el) {
+        el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+      });
+    }
+  }
+  function shop() {
+    var body = document.createElement('div');
+    body.innerHTML = '<div class="reward" style="margin-bottom:12px;"><b>' + state.coins + '</b>' + coinSvg() + '</div>' +
+      '<div class="tgrid">' +
+      '<button class="tcard" id="buyAd"><div class="tname">شاهد إعلان</div><div class="tstate">+' + AD_COINS + ' عملة</div><span class="chip">AD</span></button>' +
+      '<button class="tcard" id="buy100"><div class="tname">حزمة صغيرة</div><div class="tstate">+100 عملة</div><span class="chip">$0.99</span></button>' +
+      '<button class="tcard" id="buy500"><div class="tname">حزمة متوسطة</div><div class="tstate">+500 عملة</div><span class="chip">$3.99</span></button>' +
+      '<button class="tcard" id="buy1200"><div class="tname">حزمة كبيرة</div><div class="tstate">+1200 عملة</div><span class="chip">$7.99</span></button>' +
+      '</div>' +
+      '<ul class="how" style="margin-top:16px;"><li>تلميح: ' + HINT_COST + ' عملات.</li><li>محاولة إضافية: ' + LIFE_COST + ' عملة.</li>' +
+      '<li>تحصل على ' + STAR_BONUS + ' عملات عند إنهاء مرحلة بـ3 نجوم.</li></ul>';
+
+    modal('متجر العملات', body, [{ label: 'إغلاق', onClick: closeModal }]);
+
+    var m = $('modal');
+    m.querySelector('#buyAd').onclick = function() { showAd('reward', function() { addCoins(AD_COINS); shop(); }); };
+
+    // IAP Wrapper function - ready to be plugged into capacitor-iap or Google Play Billing
+    function buyProduct(sku, coins) {
+      toast('جاري الاتصال بمتجر Google Play...');
+      // In production with capacitor-iap, this would look like:
+      // CapacitorIAP.purchaseProduct({ sku: sku }).then(...)
+      setTimeout(function() {
+        addCoins(coins);
+        toast('تم الشراء بنجاح! + ' + coins + ' عملة');
+        sfx.win();
+        shop();
+      }, 1200);
+    }
+
+    m.querySelector('#buy100').onclick = function() { buyProduct('coin_pack_100', 100); };
+    m.querySelector('#buy500').onclick = function() { buyProduct('coin_pack_500', 500); };
+    m.querySelector('#buy1200').onclick = function() { buyProduct('coin_pack_1200', 1200); };
+  }
+
+  // ---- Mute ----
+  var ICON_ON = 'M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4zM15.5 9a4.2 4.2 0 0 1 0 6';
+  var ICON_OFF = 'M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4zM16 9.5l5 5M21 9.5l-5 5';
+  function renderMute() {
+    ['muteBtn', 'muteBtn2'].forEach(function (id) {
+      var b = $(id);
+      b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + (audio.mute ? ICON_OFF : ICON_ON) + '"/></svg>';
+      b.setAttribute('aria-label', audio.mute ? 'تشغيل الصوت' : 'كتم الصوت');
+    });
+  }
+  function toggleMute() { audio.mute = !audio.mute; store('arrowout.mute', audio.mute ? '1' : '0'); renderMute(); }
+
+  // ---- Zoom and pan (two fingers, mouse wheel, drag when zoomed) ----
+  var view = { s: 1, x: 0, y: 0 };
+  function clampView() {
+    var b = $('board'), W = b.clientWidth, H = b.clientHeight;
+    view.s = Math.min(Math.max(view.s, 1), 4);
+    view.x = Math.min(0, Math.max(W * (1 - view.s), view.x));
+    view.y = Math.min(0, Math.max(H * (1 - view.s), view.y));
+  }
+  function applyView() {
+    clampView();
+    var sv = $('board').firstElementChild;
+    if (sv) { sv.style.transformOrigin = '0 0'; sv.style.transform = view.s === 1 ? '' : 'translate(' + view.x + 'px,' + view.y + 'px) scale(' + view.s + ')'; }
+    $('zoomReset').hidden = view.s < 1.05;
+    $('zoomReset').textContent = view.s.toFixed(1) + '×';
+  }
+  function resetView() { view.s = 1; view.x = 0; view.y = 0; applyView(); }
+  function mapView(px, py) {
+    var b = $('board');
+    return [px * view.s + view.x / (b.clientWidth || 1) * 100, py * view.s + view.y / (b.clientHeight || 1) * 100];
+  }
+  (function () {
+    var b = $('board'), ptrs = {}, g = null, swallow = false, swTimer = null;
+    function pos(e) { var r = b.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+    function startGesture() {
+      var k = Object.keys(ptrs);
+      if (k.length >= 2) {
+        var a = ptrs[k[0]], c = ptrs[k[1]], mx = (a[0] + c[0]) / 2, my = (a[1] + c[1]) / 2;
+        g = { type: 'pinch', d0: Math.hypot(a[0] - c[0], a[1] - c[1]) || 1, s0: view.s, px: (mx - view.x) / view.s, py: (my - view.y) / view.s };
+      } else if (k.length === 1) {
+        g = { type: 'pan', x0: ptrs[k[0]][0], y0: ptrs[k[0]][1], vx: view.x, vy: view.y, moved: false };
+      } else g = null;
+    }
+    b.addEventListener('pointerdown', function (e) { clearTimeout(swTimer); ptrs[e.pointerId] = pos(e); startGesture(); });
+    window.addEventListener('pointermove', function (e) {
+      if (!ptrs[e.pointerId] || !g) return;
+      ptrs[e.pointerId] = pos(e);
+      var k = Object.keys(ptrs);
+      if (g.type === 'pinch' && k.length >= 2) {
+        var a = ptrs[k[0]], c = ptrs[k[1]], mx = (a[0] + c[0]) / 2, my = (a[1] + c[1]) / 2;
+        view.s = Math.min(4, Math.max(1, g.s0 * (Math.hypot(a[0] - c[0], a[1] - c[1]) / g.d0)));
+        view.x = mx - g.px * view.s; view.y = my - g.py * view.s;
+        swallow = true; applyView();
+      } else if (g.type === 'pan') {
+        var p = ptrs[k[0]], dx = p[0] - g.x0, dy = p[1] - g.y0;
+        if (!g.moved && Math.hypot(dx, dy) > 7) g.moved = true;
+        if (g.moved && view.s > 1) { swallow = true; view.x = g.vx + dx; view.y = g.vy + dy; applyView(); }
+      }
+    });
+    function up(e) {
+      if (!ptrs[e.pointerId]) return;
+      delete ptrs[e.pointerId];
+      startGesture();
+      if (!Object.keys(ptrs).length) { swTimer = setTimeout(function () { swallow = false; }, 80); }
+    }
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    b.addEventListener('click', function (e) { if (swallow) { e.stopPropagation(); e.preventDefault(); } }, true);
+    b.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      var p = pos(e), ns = Math.min(4, Math.max(1, view.s * Math.exp(-e.deltaY * 0.0016)));
+      var px = (p[0] - view.x) / view.s, py = (p[1] - view.y) / view.s;
+      view.s = ns; view.x = p[0] - px * ns; view.y = p[1] - py * ns; applyView();
+    }, { passive: false });
+    window.addEventListener('resize', applyView);
+    $('zoomReset').addEventListener('click', resetView);
+  })();
+
+  // ---- Worlds: every 10 levels the background mood changes ----
+  var WORLDS = [
+    { n: 'البداية', h: 30, h2: 200 }, { n: 'الغروب الذهبي', h: 20, h2: 340 }, { n: 'الغابة', h: 140, h2: 60 },
+    { n: 'المحيط', h: 200, h2: 170 }, { n: 'الكريستال', h: 270, h2: 200 }, { n: 'الصحراء', h: 38, h2: 15 },
+    { n: 'الشفق', h: 310, h2: 260 }, { n: 'الجبل', h: 215, h2: 150 }, { n: 'النجوم', h: 250, h2: 300 }, { n: 'الأسطورة', h: 0, h2: 40 }
+  ];
+  function worldOf(lv) { return WORLDS[Math.floor((lv - 1) / 10) % WORLDS.length]; }
+  function setAtmo(lv) { var w = worldOf(lv), a = $('atmo'); a.style.setProperty('--h1', w.h); a.style.setProperty('--h2', w.h2); }
+  (function () {
+    var a = $('atmo');
+    for (var i = 0; i < 9; i++) {
+      var e = document.createElement('i'), sz = 22 + Math.random() * 26;
+      e.style.left = (4 + i * 11 + Math.random() * 5) + '%';
+      e.style.width = sz + 'px'; e.style.height = sz + 'px';
+      e.style.animationDuration = (26 + Math.random() * 20) + 's';
+      e.style.animationDelay = (-Math.random() * 40) + 's';
+      e.style.setProperty('--rot', (Math.random() * 60 - 30) + 'deg');
+      e.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 20V4M5.5 10.5 12 4l6.5 6.5"/></svg>';
+      a.appendChild(e);
+    }
+  })();
+  var toastT = null;
+  function toast(text) {
+    var t = $('toast');
+    t.hidden = true; void t.offsetWidth;
+    t.textContent = text; t.hidden = false;
+    clearTimeout(toastT); toastT = setTimeout(function () { t.hidden = true; }, 2600);
+  }
+
+  // Home screen: a small board that keeps clearing itself while the player decides.
+  var pv = { t: null, cycle: 0 };
+  function stopPreview() { clearTimeout(pv.t); }
+  function startPreview() {
+    stopPreview();
+    var g = generate(1 + (pv.cycle++ % 4));
+    buildBoard($('pvBoard'), g, false);
+    function step() {
+      var free = g.items.filter(function (it) { return !it.gone && !firstBlocker(g, it); });
+      if (!free.length) { pv.t = setTimeout(startPreview, 1100); return; }
+      var it = free[0];
+      it.gone = true;
+      it.cells.forEach(function (p) { g.occ[p[0]][p[1]] = null; });
+      launch(it, g);
+      pv.t = setTimeout(step, reduceMotion ? 1200 : 520);
+    }
+    pv.t = setTimeout(step, 900);
+  }
+
+  function show(view) { $('home').hidden = view !== 'home'; $('game').hidden = view !== 'game'; }
+  function play(lv) { stopPreview(); state.level = lv; show('game'); startLevel(); }
+  function showHome() {
+    closeModal();
+    show('home');
+    setAtmo(state.best);
+    $('playBtn').textContent = state.best > 1 ? 'تابع المرحلة ' + state.best : 'ابدأ اللعب';
+    var stars = 0, sv = loadStars();
+    for (var k in sv) stars += sv[k];
+    $('homeStats').innerHTML = '<span class="stat">المرحلة <b>' + state.best + '</b></span>' +
+      '<span class="stat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + STAR + '"/></svg><b>' + stars + '</b> نجمة</span>';
+    startPreview();
+  }
+
+  function levelPicker() {
+    var grid = document.createElement('div');
+    grid.className = 'lvgrid';
+    var count = Math.max(12, Math.ceil(state.best / 4) * 4 + 4);
+    function make(i) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'lv' + (i === state.best ? ' cur' : '');
+      b.innerHTML = '<span>' + i + '</span><small>' + starText(i) + '</small>';
+      b.disabled = i > state.best;
+      b.addEventListener('click', function () { closeModal(); goFull(); play(i); });
+      grid.appendChild(b);
+    }
+    for (var i = 1; i <= count; i++) make(i);
+    modal('المراحل', grid, [{ label: 'إغلاق', onClick: closeModal }]);
+  }
+
+  function howTo() {
+    var ol = document.createElement('ol');
+    ol.className = 'how';
+    ['اضغط على سهم، فيخرج رأسه في اتجاه السهم والجسم يتبعه على نفس الخط حتى يغادر اللوحة.',
+     'إذا كان في الخط أمام الرأس سهم آخر فلن يتحرك، وتخسر قلباً.',
+     'كبّر اللوحة بإصبعين (أو بعجلة الفأرة) وحرّكها بإصبع واحد، ويعيد زر 1× الحجم الأصلي.',
+     'أخرج كل الأسهم لتنهي المرحلة. زر التلميح يلوّن لك سهماً يمكن إخراجه الآن.'].forEach(function (t) {
+      var li = document.createElement('li'); li.textContent = t; ol.appendChild(li);
+    });
+    modal('طريقة اللعب', ol, [{ label: 'فهمت', primary: true, onClick: closeModal }]);
+  }
+
+  // Fullscreen is requested from the Start tap. Some phones and in-app viewers refuse it, so the game also fills the whole viewport by layout.
+  function fsSupported() { var el = document.documentElement; return !!(document.fullscreenEnabled || document.webkitFullscreenEnabled) && !!(el.requestFullscreen || el.webkitRequestFullscreen); }
+  function isFull() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  function goFull() {
+    try {
+      if (!fsSupported() || isFull()) return;
+      var el = document.documentElement, f = el.requestFullscreen || el.webkitRequestFullscreen, r = f.call(el);
+      if (r && r.catch) r.catch(function () {});
+    } catch (e) {}
+  }
+  function leaveFull() {
+    try {
+      var x = document.exitFullscreen || document.webkitExitFullscreen;
+      if (isFull() && x) { var r = x.call(document); if (r && r.catch) r.catch(function () {}); }
+    } catch (e) {}
+  }
+  $('fsBtn').hidden = !fsSupported();
+  $('fsBtn').addEventListener('click', function () { if (isFull()) leaveFull(); else goFull(); });
+
+  $('playBtn').addEventListener('click', function () { goFull(); play(state.best); });
+  $('levelsBtn').addEventListener('click', levelPicker);
+  $('howBtn').addEventListener('click', howTo);
+  $('homeBtn').addEventListener('click', showHome);
+  $('shopBtn').addEventListener('click', shop);
+  $('shopHomeBtn').addEventListener('click', shop);
+
+  $('muteBtn').addEventListener('click', toggleMute);
+  $('muteBtn2').addEventListener('click', toggleMute);
+  document.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('.btn, .iconbtn, .lv, .tcard')) sfx.click();
+  });
+
+  var savedTheme = store('arrowout.theme');
+  var okTheme = THEMES.filter(function (t) { return t.id === savedTheme && isOwned(t); })[0];
+  applyTheme(okTheme ? okTheme.id : 'classic');
+  $('themesBtn').addEventListener('click', themeShop);
+  $('coinsBtn').addEventListener('click', shop);
+  $('coinsHome').addEventListener('click', shop);
+  renderMute();
+  renderCoins();
+  showHome();
+})();
+</script>
+
+</body></html>
